@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""Dayglyph: encode dates as two Unicode characters and decode to the nearest date to today in UTC."""
+
+import argparse
+import hashlib
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
+
+
+# Keep visual groups reviewable; the encoding order is derived independently below.
+ALPHABET = (
+    "abcdefghijklmnopqrstuvwxyz"
+    "+"  # PLUS SIGN
+    "@"  # COMMERCIAL AT
+    "_"  # LOW LINE
+
+    "Γ"  # GREEK CAPITAL LETTER GAMMA
+    "Δ"  # GREEK CAPITAL LETTER DELTA
+    "Θ"  # GREEK CAPITAL LETTER THETA
+    "Λ"  # GREEK CAPITAL LETTER LAMDA
+    "Ξ"  # GREEK CAPITAL LETTER XI
+    "Π"  # GREEK CAPITAL LETTER PI
+    "Σ"  # GREEK CAPITAL LETTER SIGMA
+    "Φ"  # GREEK CAPITAL LETTER PHI
+    "Ψ"  # GREEK CAPITAL LETTER PSI
+    "Ω"  # GREEK CAPITAL LETTER OMEGA
+    "α"  # GREEK SMALL LETTER ALPHA
+    "β"  # GREEK SMALL LETTER BETA
+    "γ"  # GREEK SMALL LETTER GAMMA
+    "δ"  # GREEK SMALL LETTER DELTA
+    "ε"  # GREEK SMALL LETTER EPSILON
+    "ζ"  # GREEK SMALL LETTER ZETA
+    "η"  # GREEK SMALL LETTER ETA
+    "θ"  # GREEK SMALL LETTER THETA
+    "λ"  # GREEK SMALL LETTER LAMDA
+    "μ"  # GREEK SMALL LETTER MU
+    "ξ"  # GREEK SMALL LETTER XI
+    "π"  # GREEK SMALL LETTER PI
+    "φ"  # GREEK SMALL LETTER PHI
+    "ψ"  # GREEK SMALL LETTER PSI
+    "ω"  # GREEK SMALL LETTER OMEGA
+
+    "←"  # LEFTWARDS ARROW
+    "↑"  # UPWARDS ARROW
+    "→"  # RIGHTWARDS ARROW
+    "↓"  # DOWNWARDS ARROW
+    "∞"  # INFINITY
+    "√"  # SQUARE ROOT
+    "∫"  # INTEGRAL
+    "≈"  # ALMOST EQUAL TO
+    "≠"  # NOT EQUAL TO
+    "∩"  # INTERSECTION
+    "∀"  # FOR ALL
+    "∂"  # PARTIAL DIFFERENTIAL
+    "∃"  # THERE EXISTS
+    "∇"  # NABLA
+    "∈"  # ELEMENT OF
+    "∉"  # NOT AN ELEMENT OF
+    "∋"  # CONTAINS AS MEMBER
+    "∧"  # LOGICAL AND
+    "∨"  # LOGICAL OR
+    "∠"  # ANGLE
+    "∴"  # THEREFORE
+    "∵"  # BECAUSE
+    "⊕"  # CIRCLED PLUS
+    "⊖"  # CIRCLED MINUS
+    "⊗"  # CIRCLED TIMES
+    "⊘"  # CIRCLED DIVISION SLASH
+    "⊙"  # CIRCLED DOT OPERATOR
+    "⊥"  # UP TACK
+    "⊤"  # DOWN TACK
+    "⊢"  # RIGHT TACK
+    "⊣"  # LEFT TACK
+
+    "■"  # BLACK SQUARE
+    "□"  # WHITE SQUARE
+    "▲"  # BLACK UP-POINTING TRIANGLE
+    "△"  # WHITE UP-POINTING TRIANGLE
+    "▼"  # BLACK DOWN-POINTING TRIANGLE
+    "▽"  # WHITE DOWN-POINTING TRIANGLE
+    "◀"  # BLACK LEFT-POINTING TRIANGLE
+    "▶"  # BLACK RIGHT-POINTING TRIANGLE
+    "●"  # BLACK CIRCLE
+    "○"  # WHITE CIRCLE
+    "★"  # BLACK STAR
+    "☆"  # WHITE STAR
+    "♠"  # BLACK SPADE SUIT
+    "♣"  # BLACK CLUB SUIT
+    "♥"  # BLACK HEART SUIT
+    "♦"  # BLACK DIAMOND SUIT
+    "♪"  # EIGHTH NOTE
+    "♫"  # BEAMED EIGHTH NOTES
+
+    "≡"  # IDENTICAL TO
+    "≢"  # NOT IDENTICAL TO
+    "≤"  # LESS-THAN OR EQUAL TO
+    "≥"  # GREATER-THAN OR EQUAL TO
+    "≪"  # MUCH LESS-THAN
+    "≫"  # MUCH GREATER-THAN
+    "∮"  # CONTOUR INTEGRAL
+    "⌘"  # PLACE OF INTEREST SIGN
+    "⌥"  # OPTION KEY
+    "⌁"  # ELECTRIC ARROW
+    "⌗"  # VIEWDATA SQUARE
+    "⌂"  # HOUSE
+    "⏏"  # EJECT SYMBOL
+    "↖"  # NORTH WEST ARROW
+    "↗"  # NORTH EAST ARROW
+    "↘"  # SOUTH EAST ARROW
+    "↙"  # SOUTH WEST ARROW
+    "♭"  # MUSIC FLAT SIGN
+    "♮"  # MUSIC NATURAL SIGN
+    "♯"  # MUSIC SHARP SIGN
+    "⬡"  # WHITE HEXAGON
+    "⬢"  # BLACK HEXAGON
+    "◇"  # WHITE DIAMOND
+    "◆"  # BLACK DIAMOND
+    "◐"  # CIRCLE WITH LEFT HALF BLACK
+    "◑"  # CIRCLE WITH RIGHT HALF BLACK
+    "◒"  # CIRCLE WITH LOWER HALF BLACK
+    "◓"  # CIRCLE WITH UPPER HALF BLACK
+
+    "."  # FULL STOP
+    ","  # COMMA
+    ":"  # COLON
+    "/"  # SOLIDUS
+    "%"  # PERCENT SIGN
+    "·"  # MIDDLE DOT
+    "•"  # BULLET
+    "…"  # HORIZONTAL ELLIPSIS
+    "‽"  # INTERROBANG
+    "¡"  # INVERTED EXCLAMATION MARK
+    "¿"  # INVERTED QUESTION MARK
+    "«"  # LEFT-POINTING DOUBLE ANGLE QUOTATION MARK
+    "»"  # RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK
+    "¬"  # NOT SIGN
+    "⌐"  # REVERSED NOT SIGN
+    "⁜"  # DOTTED CROSS
+    "§"  # SECTION SIGN
+    "¶"  # PILCROW SIGN
+    "†"  # DAGGER
+    "‡"  # DOUBLE DAGGER
+)
+# Zero-based Gregorian days: 0001-01-01 is day zero, unlike Python's ordinal 1.
+EPOCH = date(1, 1, 1)
+
+
+def shuffle_alphabet(alphabet: str) -> str:
+    # Stable hashes avoid dependence on Python's randomized hash or RNG versions.
+    # The seed and ordering are part of the date format.
+    ranked = sorted(
+        (hashlib.sha256(f"short-ts-v1:{character}".encode("utf-8")).digest(), character)
+        for character in alphabet
+    )
+    return "".join(character for _, character in ranked)
+
+
+SHUFFLED_ALPHABET = shuffle_alphabet(ALPHABET)
+CYCLE_DAYS = len(SHUFFLED_ALPHABET) ** 2
+
+
+def encode_integer(value: int) -> str:
+    if value < 0:
+        raise ValueError("Value must be nonnegative")
+    if value == 0:
+        return SHUFFLED_ALPHABET[0]
+    digits = []
+    while value:
+        value, remainder = divmod(value, len(SHUFFLED_ALPHABET))
+        digits.append(SHUFFLED_ALPHABET[remainder])
+    return "".join(reversed(digits))
+
+
+def encode_date(value: date) -> str:
+    days = (value - EPOCH).days % CYCLE_DAYS
+    return encode_integer(days).rjust(2, SHUFFLED_ALPHABET[0])
+
+
+def parse_token(token: str) -> date:
+    if len(token) != 2:
+        raise ValueError("Expected exactly two day characters")
+    days = 0
+    for digit in token:
+        days = days * len(SHUFFLED_ALPHABET) + SHUFFLED_ALPHABET.index(digit)
+    return EPOCH + timedelta(days=days)
+
+
+def nearest_occurrence(value: date, reference: date) -> date:
+    period = timedelta(days=CYCLE_DAYS)
+    cycle = (reference - value) // period
+    candidates = []
+    for offset in [cycle, cycle + 1]:
+        try:
+            candidates.append(value + offset * period)
+        except OverflowError:
+            # At years 1 and 9999, only one neighboring occurrence may be representable.
+            continue
+    # The second key favors the future on an exact tie, without float rounding.
+    return min(candidates, key=lambda candidate: (abs(candidate - reference), candidate < reference))
+
+
+def decode_date(token: str, reference: date | None = None) -> date:
+    reference = datetime.now(timezone.utc).date() if reference is None else reference
+    return nearest_occurrence(parse_token(token), reference)
+
+
+def shift_years(value: date, years: int) -> date:
+    year = value.year + years
+    # Keep calendar anniversaries, clamping leap day in non-leap target years.
+    day = min(value.day, monthrange(year, value.month)[1])
+    return value.replace(year=year, day=day)
+
+
+def show_examples(today: date) -> None:
+    print(f"Epoch (day 0): {EPOCH.isoformat()}; offset from today: {(EPOCH - today).days:+d} days")
+    for label, years in [("Today", 0), ("+1 year", 1), ("-1 year", -1), ("+10 years", 10), ("+100 years", 100)]:
+        sample = shift_years(today, years)
+        token = encode_date(sample)
+        decoded = decode_date(token, today)
+        suffix = f" -> nearest: {decoded.isoformat()}" if decoded != sample else ""
+        print(f"{label:10} {sample.isoformat()}  {token}{suffix}")
+    show_cycle_info()
+    show_special_examples(today)
+
+
+def show_special_examples(reference: date) -> None:
+    print("Special-character tokens:")
+    for token in [".,", ":/", "%·", "¬⌐", "⁜†", "↑∞"]:
+        decoded = decode_date(token, reference)
+        print(f"{token}  {decoded.isoformat()}")
+
+
+def show_cycle_info() -> None:
+    first_date = EPOCH + timedelta(days=CYCLE_DAYS)
+    print(f"Cycle: {CYCLE_DAYS} days (~{CYCLE_DAYS / 365.2425:.1f} years)")
+    print(f"First wraparound: {first_date.isoformat()}  {encode_date(first_date)}")
+
+
+def validate_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
+    if sum([arguments.date is not None, arguments.decode is not None, arguments.test, arguments.alphabet]) > 1:
+        parser.error("Use only one of date, --decode, --test, or --alphabet")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("date", nargs="?", help="ISO date (default: today in UTC)")
+    parser.add_argument("--decode", metavar="TOKEN", help="show the matching date nearest to today in UTC")
+    parser.add_argument("--test", action="store_true", help="show date encodings and special-character token examples")
+    parser.add_argument("--alphabet", action="store_true", help="print the encoding alphabet")
+    arguments = parser.parse_args()
+    validate_mode(parser, arguments)
+    try:
+        if arguments.alphabet:
+            print(SHUFFLED_ALPHABET)
+            print(f"Length: {len(ALPHABET)}")
+        elif arguments.test:
+            show_examples(datetime.now(timezone.utc).date())
+        elif arguments.decode is not None:
+            print(decode_date(arguments.decode).isoformat())
+        else:
+            value = date.fromisoformat(arguments.date) if arguments.date else datetime.now(timezone.utc).date()
+            print(encode_date(value))
+    except (ValueError, OverflowError) as error:
+        parser.error(str(error))
+
+
+if __name__ == "__main__":
+    main()
