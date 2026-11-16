@@ -182,6 +182,14 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(output.getvalue(), expected + "\n")
         clock.now.assert_called_with(timezone.utc)
 
+    @patch("sys.argv", ["dayglyph", "--decode", "ee", "--reference-date", "0001-01-01"])
+    @patch("sys.stdout", new_callable=io.StringIO)
+    @patch("dayglyph.datetime", wraps=datetime)
+    def test_decode_reference_date(self, clock: MagicMock, output: io.StringIO) -> None:
+        main()
+        self.assertEqual(output.getvalue(), "0001-01-01\n")
+        clock.now.assert_not_called()
+
     @patch("sys.argv", ["dayglyph", "--alphabet"])
     @patch("sys.stdout", new_callable=io.StringIO)
     def test_alphabet(self, output: io.StringIO) -> None:
@@ -215,7 +223,10 @@ class TestCli(unittest.TestCase):
         for arguments in [
             ["--test", "2026-01-01"], ["--test", "--decode", "ee"], ["--alphabet", "--test"],
             ["--time-separators"], ["--base", "64"], ["--decode", "ee090909"], ["not-a-date"],
-            ["2026-01-01T09:40:23Z"],
+            ["2026-01-01T09:40:23Z"], ["--reference-date", "2026-11-11"],
+            ["2026-11-11", "--reference-date", "2026-11-11"], ["--test", "--reference-date", "2026-11-11"],
+            ["--alphabet", "--reference-date", "2026-11-11"],
+            ["--decode", "ee", "--reference-date", "not-a-date"],
         ]:
             with self.subTest(arguments=arguments):
                 argv[:] = ["dayglyph", *arguments]

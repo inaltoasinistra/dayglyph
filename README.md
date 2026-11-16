@@ -11,6 +11,7 @@ Requires Python 3.10+; no dependencies.
 ./dayglyph                      # Today in UTC
 ./dayglyph 2026-11-11            # ∫‡
 ./dayglyph --decode '∫‡'         # Nearest matching date
+./dayglyph --decode '∫‡' --reference-date 2026-11-11  # Use a reference date instead of today
 ./dayglyph --alphabet            # Encoding alphabet and its length
 ./dayglyph --test                # Examples, cycle length, and wraparound
 ```
@@ -34,6 +35,8 @@ install -m 755 dayglyph ~/.local/bin/dayglyph
 
 Tokens repeat about every **62.4 years**, so decoding normally resolves dates within about 31.2 years of today.
 A token is not a permanent, globally unique date identifier. Time of day is outside the format.
+Use `--reference-date YYYY-MM-DD` with `--decode` when you know roughly when the glyph was created; it selects the
+matching date nearest that date instead of today. This does not change the format's fixed day zero.
 
 Two characters means two Unicode code points, not two bytes. Glyph rendering and double-click selection depend
 on your terminal and font.

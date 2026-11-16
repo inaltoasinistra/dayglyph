@@ -239,12 +239,19 @@ def show_cycle_info() -> None:
 def validate_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
     if sum([arguments.date is not None, arguments.decode is not None, arguments.test, arguments.alphabet]) > 1:
         parser.error("Use only one of date, --decode, --test, or --alphabet")
+    validate_reference_date_mode(parser, arguments)
+
+
+def validate_reference_date_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
+    if arguments.reference_date is not None and arguments.decode is None:
+        parser.error("--reference-date requires --decode")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("date", nargs="?", help="ISO date (default: today in UTC)")
     parser.add_argument("--decode", metavar="TOKEN", help="show the matching date nearest to today in UTC")
+    parser.add_argument("--reference-date", metavar="YYYY-MM-DD", help="date to use instead of today when decoding")
     parser.add_argument("--test", action="store_true", help="show date encodings and special-character token examples")
     parser.add_argument("--alphabet", action="store_true", help="print the encoding alphabet")
     arguments = parser.parse_args()
@@ -256,7 +263,8 @@ def main() -> None:
         elif arguments.test:
             show_examples(datetime.now(timezone.utc).date())
         elif arguments.decode is not None:
-            print(decode_date(arguments.decode).isoformat())
+            reference = date.fromisoformat(arguments.reference_date) if arguments.reference_date is not None else None
+            print(decode_date(arguments.decode, reference).isoformat())
         else:
             value = date.fromisoformat(arguments.date) if arguments.date else datetime.now(timezone.utc).date()
             print(encode_date(value))
