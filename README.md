@@ -1,7 +1,12 @@
 # Dayglyph
 
-Encode a calendar date or UTC timestamp as **2–7 Unicode characters** for terminal prompts and logs.
-Decode a token to the matching date or timestamp nearest to now in UTC.
+Dayglyph was designed for terminal prompts and logs, where output is usually read in real time and the date
+is almost never useful. Instead of spending ten characters on `YYYY-MM-DD`, it represents the date with just
+two Unicode characters. If you later need to know whether a command ran two days or two weeks ago, you can
+decode those characters; otherwise, they take up only two characters on screen.
+
+Dayglyph also encodes UTC timestamps at finer precision in 4–7 characters. Decoding selects the matching date
+or timestamp nearest to now in UTC, or to a reference date you provide.
 
 ## Usage
 
