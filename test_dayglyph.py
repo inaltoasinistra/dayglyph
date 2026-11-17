@@ -37,13 +37,15 @@ REFERENCE = date(2026, 11, 11)
 class TestAlphabet(unittest.TestCase):
     def test_membership(self) -> None:
         expected = (
-            "abcdefghijklmnopqrstuvwxyz+@_ΓΔΘΛΞΠΣΦΨΩαβγδεζηθλμξπφψω←↑→↓∞√∫≈≠∩∀∂∃∇∈∉∋∧∨∠∴∵"
-            "⊕⊖⊗⊘⊙⊥⊤⊢⊣■□▲△▼▽◀▶●○★☆♠♣♥♦♪♫≡≢≤≥≪≫∮⌘⌥⌁⌗⌂⏏↖↗↘↙♭♮♯⬡⬢◇◆◐◑◒◓"
-            ".,:/%·•…‽¡¿«»¬⌐⁜§¶†‡"
+            "abcdefghjklmnopqrstuvwxyz+@_ΓΔΘΛΞΠΣΦΨΩαβγδεζηθλμξπφψω←↑→↓∞√∫≈≠∩∀∂∃∇∈∉∋∧∨∠∴∵"
+            "⊕⊖⊗⊘⊙⊥⊤⊢⊣■□▲△▼▽◀▶●○★☆♠♣♥♦♪♫♜≡≢≤≥≪≫∮⌘⌥⌁⌗⌂⏏↖↗↘↙♭♮♯⬡⬢◇◆◐◑◒◓"
+            ".,:/%·•…‽¡¿«»¬⌐⁜§¶†‡¤"
         )
         self.assertCountEqual(ALPHABET, expected)
-        self.assertEqual(len(set(ALPHABET)), 151)
-        self.assertEqual(CYCLE_DAYS, 22801)
+        self.assertEqual(len(set(ALPHABET)), 152)
+        self.assertNotIn("i", ALPHABET)
+        self.assertNotIn("=", ALPHABET)
+        self.assertEqual(CYCLE_DAYS, 23104)
         for character in ALPHABET:
             with self.subTest(character=character):
                 self.assertTrue(character.isprintable())
@@ -62,7 +64,7 @@ class TestAlphabet(unittest.TestCase):
     def test_names(self) -> None:
         source = Path(__file__).with_name("dayglyph").read_text()
         annotations = dict(re.findall(r'^    "(.)"  # (.+)$', source, re.MULTILINE))
-        special = set(ALPHABET) - set("abcdefghijklmnopqrstuvwxyz")
+        special = set(ALPHABET) - set("abcdefghjklmnopqrstuvwxyz")
         self.assertEqual(set(annotations), special)
         for character in special:
             with self.subTest(character=character):
@@ -81,10 +83,10 @@ class TestDates(unittest.TestCase):
     def test_encode(self) -> None:
         for value, expected in [
             ("0001-01-01", "ee"),
-            ("0001-01-02", "e⊙"),
-            ("2026-11-11", "∫‡"),
-            ("0063-06-05", "dd"),
-            ("0063-06-06", "ee"),
+            ("0001-01-02", "e♜"),
+            ("2026-11-11", "♥▶"),
+            ("0064-04-03", "dd"),
+            ("0064-04-04", "ee"),
         ]:
             with self.subTest(value=value):
                 self.assertEqual(encode_date(date.fromisoformat(value)), expected)
@@ -92,17 +94,17 @@ class TestDates(unittest.TestCase):
     def test_cycles(self) -> None:
         for cycles in [-3, -1, 0, 1, 3]:
             with self.subTest(cycles=cycles):
-                value = REFERENCE + timedelta(days=22801 * cycles)
-                self.assertEqual(encode_date(value), "∫‡")
-                self.assertEqual(decode_date("∫‡", value), value)
+                value = REFERENCE + timedelta(days=CYCLE_DAYS * cycles)
+                self.assertEqual(encode_date(value), "♥▶")
+                self.assertEqual(decode_date("♥▶", value), value)
 
     def test_decode(self) -> None:
-        self.assertEqual(decode_date("dd", date.min), date(63, 6, 5))
+        self.assertEqual(decode_date("dd", date.min), date(64, 4, 3))
         for token, expected in [
-            ("ee", "1998-09-01"),
-            ("dd", "1998-08-31"),
-            (":/", "2049-06-17"),
-            ("∀a", "2034-07-17"),
+            ("ee", "2025-03-19"),
+            ("dd", "2025-03-18"),
+            (":/", "2013-07-03"),
+            ("∀a", "1998-06-27"),
         ]:
             with self.subTest(token=token):
                 self.assertEqual(decode_date(token, REFERENCE), date.fromisoformat(expected))
@@ -110,17 +112,17 @@ class TestDates(unittest.TestCase):
     def test_all_day_codes(self) -> None:
         # Check every modular residue against an independent day-by-day calendar.
         epoch = date(1, 1, 1)
-        for day in range(22801):
+        for day in range(CYCLE_DAYS):
             value = epoch + timedelta(days=day)
             token = encode_date(value)
             self.assertEqual(len(token), 2)
-            self.assertEqual(token, SHUFFLED_ALPHABET[day // 151] + SHUFFLED_ALPHABET[day % 151])
+            self.assertEqual(token, SHUFFLED_ALPHABET[day // len(ALPHABET)] + SHUFFLED_ALPHABET[day % len(ALPHABET)])
             self.assertEqual(decode_date(token, value), value)
 
     def test_midpoint(self) -> None:
         lower = date(1, 1, 1)
-        upper = lower + timedelta(days=22801)
-        for days, expected in [(11400, lower), (11401, upper)]:
+        upper = lower + timedelta(days=CYCLE_DAYS)
+        for days, expected in [(CYCLE_DAYS // 2 - 1, lower), (CYCLE_DAYS // 2, upper)]:
             with self.subTest(days=days):
                 self.assertEqual(decode_date("ee", lower + timedelta(days=days)), expected)
 
@@ -152,10 +154,10 @@ class TestTimestamps(unittest.TestCase):
     def test_precision(self) -> None:
         value = datetime(2026, 11, 11, 9, 40, 23, 123456, tzinfo=timezone.utc)
         for precision, token, expected in [
-            ("minute", "¡γ∩♠", "2026-11-11T09:40Z"),
-            ("second", ":●⬡↙.", "2026-11-11T09:40:23Z"),
-            ("millisecond", "∩⬡p⊗∋α", "2026-11-11T09:40:23.123Z"),
-            ("microsecond", "∂uΞ⬡⌥→∈", "2026-11-11T09:40:23.123456Z"),
+            ("minute", "dc∈Δ", "2026-11-11T09:40Z"),
+            ("second", "Ω∃bx∀", "2026-11-11T09:40:23Z"),
+            ("millisecond", "¬◐w∵⊕¬", "2026-11-11T09:40:23.123Z"),
+            ("microsecond", "▽‽r◑♫↘⌂", "2026-11-11T09:40:23.123456Z"),
         ]:
             with self.subTest(precision=precision):
                 self.assertEqual(encode_timestamp(value, precision), token)
@@ -174,7 +176,7 @@ class TestTimestamps(unittest.TestCase):
     def test_nearest(self) -> None:
         value = datetime.min.replace(tzinfo=timezone.utc)
         token = encode_timestamp(value, "minute")
-        cycle = timedelta(microseconds=151 ** 4 * 60_000_000)
+        cycle = timedelta(microseconds=len(ALPHABET) ** 4 * 60_000_000)
         midpoint = value + cycle / 2
         self.assertEqual(decode_timestamp(token, midpoint - timedelta(microseconds=1)), value)
         self.assertEqual(decode_timestamp(token, midpoint), value + cycle)
@@ -184,7 +186,7 @@ class TestTimestamps(unittest.TestCase):
         value = datetime(2026, 11, 11, 9, 40, 23, 123456, tzinfo=timezone.utc)
         for precision, (length, unit, _) in dayglyph.TIME_PRECISIONS.items():
             with self.subTest(precision=precision):
-                cycle = timedelta(microseconds=151 ** length * unit)
+                cycle = timedelta(microseconds=len(ALPHABET) ** length * unit)
                 token = encode_timestamp(value, precision)
                 self.assertEqual(encode_timestamp(value + cycle, precision), token)
                 self.assertEqual(decode_timestamp(token, value + cycle),
@@ -214,15 +216,15 @@ class TestCli(unittest.TestCase):
     def test_executable(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         result = subprocess.run([str(executable), "2026-11-11"], capture_output=True, text=True, check=True)
-        self.assertEqual(result.stdout, "∫‡\n")
+        self.assertEqual(result.stdout, "♥▶\n")
 
     def test_timestamp(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         for precision, expected, utc, local in [
-            ("minute", "¡γ∩♠", "2026-11-11T09:40Z", "2026-11-11T04:40-05:00"),
-            ("second", ":●⬡↙.", "2026-11-11T09:40:23Z", "2026-11-11T04:40:23-05:00"),
-            ("millisecond", "∩⬡p⊗∋α", "2026-11-11T09:40:23.123Z", "2026-11-11T04:40:23.123-05:00"),
-            ("microsecond", "∂uΞ⬡⌥→∈", "2026-11-11T09:40:23.123456Z", "2026-11-11T04:40:23.123456-05:00"),
+            ("minute", "dc∈Δ", "2026-11-11T09:40Z", "2026-11-11T04:40-05:00"),
+            ("second", "Ω∃bx∀", "2026-11-11T09:40:23Z", "2026-11-11T04:40:23-05:00"),
+            ("millisecond", "¬◐w∵⊕¬", "2026-11-11T09:40:23.123Z", "2026-11-11T04:40:23.123-05:00"),
+            ("microsecond", "▽‽r◑♫↘⌂", "2026-11-11T09:40:23.123456Z", "2026-11-11T04:40:23.123456-05:00"),
         ]:
             with self.subTest(precision=precision):
                 encoded = subprocess.run(
@@ -240,8 +242,8 @@ class TestCli(unittest.TestCase):
     def test_precision_aliases(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         for alias, full_name, expected in [
-            ("milli", "millisecond", "∩⬡p⊗∋α"),
-            ("micro", "microsecond", "∂uΞ⬡⌥→∈"),
+            ("milli", "millisecond", "¬◐w∵⊕¬"),
+            ("micro", "microsecond", "▽‽r◑♫↘⌂"),
         ]:
             with self.subTest(alias=alias):
                 value = "2026-11-11T09:40:23.123456Z"
@@ -284,7 +286,7 @@ class TestCli(unittest.TestCase):
     def test_timestamp_now(self, clock: MagicMock, output: io.StringIO) -> None:
         clock.now.return_value = datetime(2026, 11, 11, 9, 40, 23, tzinfo=timezone.utc)
         main()
-        self.assertEqual(output.getvalue(), ":●⬡↙.\n")
+        self.assertEqual(output.getvalue(), "Ω∃bx∀\n")
         clock.now.assert_called_once_with(timezone.utc)
 
     @patch("sys.argv", new_callable=list)
@@ -293,7 +295,7 @@ class TestCli(unittest.TestCase):
     def test_encode(self, clock: MagicMock, output: io.StringIO, argv: list[str]) -> None:
         clock.now.return_value = datetime(2026, 11, 11, 23, 59, 59, tzinfo=timezone.utc)
         for arguments, expected in [
-            ([], "∫‡"),
+            ([], "♥▶"),
             (["0001-01-01"], "ee"),
         ]:
             with self.subTest(arguments=arguments):
@@ -309,7 +311,7 @@ class TestCli(unittest.TestCase):
     @patch("dayglyph.datetime", wraps=datetime)
     def test_decode(self, clock: MagicMock, output: io.StringIO, argv: list[str]) -> None:
         clock.now.return_value = datetime(2026, 11, 11, 23, 59, 59, tzinfo=timezone.utc)
-        for token, expected in [("ee", "1998-09-01"), (":/", "2049-06-17"), ("∀a", "2034-07-17")]:
+        for token, expected in [("ee", "2025-03-19"), (":/", "2013-07-03"), ("∀a", "1998-06-27")]:
             with self.subTest(token=token):
                 output.seek(0)
                 output.truncate()
@@ -330,7 +332,7 @@ class TestCli(unittest.TestCase):
     @patch("sys.stdout", new_callable=io.StringIO)
     def test_alphabet(self, output: io.StringIO) -> None:
         main()
-        self.assertEqual(output.getvalue(), f"{SHUFFLED_ALPHABET}\nLength: 151\n")
+        self.assertEqual(output.getvalue(), f"{SHUFFLED_ALPHABET}\nLength: 152\n")
 
     @patch("sys.argv", ["dayglyph", "--test"])
     @patch("sys.stdout", new_callable=io.StringIO)
@@ -340,13 +342,13 @@ class TestCli(unittest.TestCase):
         main()
         text = output.getvalue()
         self.assertIn("Epoch (day 0): 0001-01-01; offset from today: -739930 days", text)
-        self.assertIn("Today      2026-11-11  ∫‡\n", text)
-        self.assertIn("+1 year    2027-11-11  »θ\n", text)
-        self.assertIn("-1 year    2025-11-11  ∨Ω\n", text)
-        self.assertIn("+10 years  2036-11-11  ↗∩\n", text)
-        self.assertIn("+100 years 2126-11-11  sq -> nearest: 2002-01-03\n", text)
-        self.assertIn("Cycle: 22801 days (~62.4 years)", text)
-        self.assertIn("First wraparound: 0063-06-06  ee\n", text)
+        self.assertIn("Today      2026-11-11  ♥▶\n", text)
+        self.assertIn("+1 year    2027-11-11  …⬡\n", text)
+        self.assertIn("-1 year    2025-11-11  ♜↖\n", text)
+        self.assertIn("+10 years  2036-11-11  ¬d\n", text)
+        self.assertIn("+100 years 2126-11-11  ▲r -> nearest: 2000-05-07\n", text)
+        self.assertIn("Cycle: 23104 days (~63.3 years)", text)
+        self.assertIn("First wraparound: 0064-04-04  ee\n", text)
         rows = text.split("Special-character tokens:\n")[1].splitlines()
         self.assertEqual([row.split()[0] for row in rows], [".,", ":/", "%·", "¬⌐", "⁜†", "↑∞"])
         for row in rows:

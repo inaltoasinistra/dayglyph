@@ -8,8 +8,9 @@ from datetime import date, datetime, timedelta, timezone
 
 
 # Keep visual groups reviewable; the encoding order is derived independently below.
+# "i" is omitted because it resembles "¡"; "=" is excluded because of its interpretation in some terminals.
 ALPHABET = (
-    "abcdefghijklmnopqrstuvwxyz"
+    "abcdefghjklmnopqrstuvwxyz"
     "+"  # PLUS SIGN
     "@"  # COMMERCIAL AT
     "_"  # LOW LINE
@@ -90,6 +91,7 @@ ALPHABET = (
     "♦"  # BLACK DIAMOND SUIT
     "♪"  # EIGHTH NOTE
     "♫"  # BEAMED EIGHTH NOTES
+    "♜"  # BLACK CHESS ROOK
 
     "≡"  # IDENTICAL TO
     "≢"  # NOT IDENTICAL TO
@@ -140,6 +142,7 @@ ALPHABET = (
     "¶"  # PILCROW SIGN
     "†"  # DAGGER
     "‡"  # DOUBLE DAGGER
+    "¤"  # CURRENCY SIGN
 )
 # Zero-based Gregorian days: 0001-01-01 is day zero, unlike Python's ordinal 1.
 EPOCH = date(1, 1, 1)
@@ -246,7 +249,7 @@ def parse_integer(token: str) -> int:
 def encode_timestamp(value: datetime, precision: str) -> str:
     length, unit_microseconds, _ = TIME_PRECISIONS[precision]
     offset = timestamp_offset(value, unit_microseconds)
-    # A timestamp's cycle is its entire base-151 capacity, not the date glyph's day-aligned cycle.
+    # A timestamp's cycle is its entire alphabet-base capacity, not the date glyph's day-aligned cycle.
     return encode_integer(offset % len(SHUFFLED_ALPHABET) ** length).rjust(length, SHUFFLED_ALPHABET[0])
 
 
