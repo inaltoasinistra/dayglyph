@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+import sys
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 
@@ -146,6 +147,9 @@ ALPHABET = (
 )
 # Zero-based Gregorian days: 0001-01-01 is day zero, unlike Python's ordinal 1.
 EPOCH = date(1, 1, 1)
+# This fixed date/token pair is a lightweight fingerprint, not a collision-proof version identifier.
+FORMAT_HASH_DATE = date(1010, 1, 1)
+EXPECTED_FORMAT_HASH = "◑y"
 
 
 def shuffle_alphabet(alphabet: str) -> str:
@@ -361,11 +365,20 @@ def show_cycle_info() -> None:
     print(f"First wraparound: {first_date.isoformat()}  {encode_date(first_date)}")
 
 
+def show_format_hash() -> None:
+    token = encode_date(FORMAT_HASH_DATE)
+    print(token)
+    if token != EXPECTED_FORMAT_HASH:
+        print(f"Format hash mismatch: expected {EXPECTED_FORMAT_HASH}, got {token}", file=sys.stderr)
+        raise SystemExit(1)
+
+
 def validate_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
     if sum([arguments.date is not None, arguments.decode is not None, arguments.test, arguments.alphabet]) > 1:
         parser.error("Use only one of date, --decode, --test, or --alphabet")
     validate_reference_date_mode(parser, arguments)
     validate_precision_mode(parser, arguments)
+    validate_format_hash_mode(parser, arguments)
 
 
 def validate_reference_date_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
@@ -378,12 +391,18 @@ def validate_precision_mode(parser: argparse.ArgumentParser, arguments: argparse
         parser.error("--precision applies only when encoding")
 
 
+def validate_format_hash_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
+    if arguments.date == "hash" and arguments.precision != "date":
+        parser.error("--precision does not apply to hash")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("date", nargs="?", help="date:  YYYY-MM-DD\n"
                         "UTC:   YYYY-MM-DDTHH:MM[:SS[.ffffff]]Z\n"
                         "offset: YYYY-MM-DDTHH:MM[:SS[.ffffff]]±HH:MM\n"
                         "local: YYYY-MM-DDTHH:MM[:SS[.ffffff]] (no offset)\n"
+                        "hash: format fingerprint (1010-01-01)\n"
                         "no input: current time\n"
                         "timestamps are converted to UTC before encoding")
     parser.add_argument("--precision", choices=("date", *TIME_PRECISIONS, *PRECISION_ALIASES), default="date",
@@ -402,6 +421,8 @@ def main() -> None:
             show_examples(datetime.now(timezone.utc).date())
         elif arguments.decode is not None:
             print(decode_token(arguments.decode, arguments.reference_date))
+        elif arguments.date == "hash":
+            show_format_hash()
         else:
             print(encode_value(arguments.date, arguments.precision))
     except (ValueError, OverflowError) as error:

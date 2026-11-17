@@ -213,6 +213,26 @@ class TestTimestamps(unittest.TestCase):
 
 
 class TestCli(unittest.TestCase):
+    def test_format_hash(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        result = subprocess.run([str(executable), "hash"], capture_output=True, text=True, check=True)
+        self.assertEqual(result.stdout, "◑y\n")
+        self.assertEqual(result.stderr, "")
+
+    @patch("sys.argv", ["dayglyph", "hash"])
+    @patch("sys.stderr", new_callable=io.StringIO)
+    @patch("sys.stdout", new_callable=io.StringIO)
+    @patch("dayglyph.encode_date")
+    def test_format_hash_mismatch(self, encode: MagicMock, output: io.StringIO, error: io.StringIO) -> None:
+        encode.return_value = "xx"
+        with self.assertRaises(SystemExit) as exit_status:
+            main()
+        self.assertEqual(exit_status.exception.code, 1)
+        encode.assert_called_once_with(date(1010, 1, 1))
+        self.assertEqual(output.getvalue(), "xx\n")
+        self.assertIn("◑y", error.getvalue())
+        self.assertIn("xx", error.getvalue())
+
     def test_executable(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         result = subprocess.run([str(executable), "2026-11-11"], capture_output=True, text=True, check=True)
@@ -366,6 +386,7 @@ class TestCli(unittest.TestCase):
             ["--alphabet", "--reference-date", "2026-11-11"],
             ["--decode", "ee", "--reference-date", "not-a-date"],
             ["--precision", "minute", "2026-11-11"],
+            ["--precision", "minute", "hash"],
             ["--decode", "eee"],
             ["--decode", "eeee", "--reference-date", "2026-11-11T09:40"],
             ["--decode", "eeee", "--precision", "minute"],
