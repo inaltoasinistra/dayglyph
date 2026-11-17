@@ -252,6 +252,32 @@ class TestCli(unittest.TestCase):
                 self.assertEqual(result.stdout.strip(), expected)
                 self.assertEqual(dayglyph.encode_value(value, alias), dayglyph.encode_value(value, full_name))
 
+    def test_timestamp_input(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        for arguments, expected in [
+            (["2026-11-11T23:40:23Z"], encode_date(date(2026, 11, 11))),
+            (["2026-11-11T19:40:23-05:00"], encode_date(date(2026, 11, 12))),
+            (["2026-11-11T23:40:23"], encode_date(date(2026, 11, 12))),
+            (["--precision", "minute", "2026-11-11T23:40:23"], dayglyph.encode_value(
+                "2026-11-12T04:40:23Z", "minute")),
+        ]:
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    [str(executable), *arguments],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, "TZ": "EST5EDT,M3.2.0,M11.1.0"},
+                )
+                self.assertEqual(result.stdout, f"{expected}\n")
+
+    def test_input_help(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        result = subprocess.run([str(executable), "--help"], capture_output=True, text=True, check=True)
+        self.assertIn("YYYY-MM-DDTHH:MM[:SS[.ffffff]]Z", result.stdout)
+        self.assertIn("YYYY-MM-DDTHH:MM[:SS[.ffffff]]±HH:MM", result.stdout)
+        self.assertIn("local: YYYY-MM-DDTHH:MM[:SS[.ffffff]] (no offset)", result.stdout)
+        self.assertIn("no input: current time", result.stdout)
+        self.assertIn("timestamps are converted to UTC before encoding", result.stdout)
+
     @patch("sys.argv", ["dayglyph", "--precision", "second"])
     @patch("sys.stdout", new_callable=io.StringIO)
     @patch("dayglyph.datetime", wraps=datetime)
@@ -333,12 +359,11 @@ class TestCli(unittest.TestCase):
         for arguments in [
             ["--test", "2026-01-01"], ["--test", "--decode", "ee"], ["--alphabet", "--test"],
             ["--time-separators"], ["--base", "64"], ["--decode", "ee090909"], ["not-a-date"],
-            ["2026-01-01T09:40:23Z"], ["--reference-date", "2026-11-11"],
+            ["--reference-date", "2026-11-11"],
             ["2026-11-11", "--reference-date", "2026-11-11"], ["--test", "--reference-date", "2026-11-11"],
             ["--alphabet", "--reference-date", "2026-11-11"],
             ["--decode", "ee", "--reference-date", "not-a-date"],
             ["--precision", "minute", "2026-11-11"],
-            ["--precision", "second", "2026-11-11T09:40:23"],
             ["--decode", "eee"],
             ["--decode", "eeee", "--reference-date", "2026-11-11T09:40"],
             ["--decode", "eeee", "--precision", "minute"],

@@ -44,6 +44,9 @@ Use `--reference-date YYYY-MM-DD` with `--decode` when you know roughly when the
 matching date nearest that date instead of today. This does not change the format's fixed day zero.
 
 For timestamps, `--precision` chooses the encoded resolution; the default remains `date`.
+The positional input accepts `YYYY-MM-DD`, timestamps with `Z` or a UTC offset, and timestamps without an offset
+(interpreted in the machine's local timezone). Timestamps are converted to UTC before encoding; with the default
+`date` precision, they encode their UTC date. With no positional input, the current time is used.
 `milli` and `micro` are aliases for `millisecond` and `microsecond`, respectively.
 
 | Precision   | Characters | Approximate cycle |
