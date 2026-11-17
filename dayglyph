@@ -17,8 +17,6 @@ ALPHABET = (
     "_"  # LOW LINE
 
     "Γ"  # GREEK CAPITAL LETTER GAMMA
-    "Δ"  # GREEK CAPITAL LETTER DELTA
-    "Θ"  # GREEK CAPITAL LETTER THETA
     "Λ"  # GREEK CAPITAL LETTER LAMDA
     "Ξ"  # GREEK CAPITAL LETTER XI
     "Π"  # GREEK CAPITAL LETTER PI
@@ -55,12 +53,9 @@ ALPHABET = (
     "∀"  # FOR ALL
     "∂"  # PARTIAL DIFFERENTIAL
     "∃"  # THERE EXISTS
-    "∇"  # NABLA
     "∈"  # ELEMENT OF
     "∉"  # NOT AN ELEMENT OF
     "∋"  # CONTAINS AS MEMBER
-    "∧"  # LOGICAL AND
-    "∨"  # LOGICAL OR
     "∠"  # ANGLE
     "∴"  # THEREFORE
     "∵"  # BECAUSE
@@ -86,13 +81,20 @@ ALPHABET = (
     "○"  # WHITE CIRCLE
     "★"  # BLACK STAR
     "☆"  # WHITE STAR
+    "☀"  # BLACK SUN WITH RAYS
+    "☂"  # UMBRELLA
+    "☃"  # SNOWMAN
+    "☄"  # COMET
     "♠"  # BLACK SPADE SUIT
     "♣"  # BLACK CLUB SUIT
     "♥"  # BLACK HEART SUIT
-    "♦"  # BLACK DIAMOND SUIT
     "♪"  # EIGHTH NOTE
     "♫"  # BEAMED EIGHTH NOTES
+    "♚"  # BLACK CHESS KING
+    "♛"  # BLACK CHESS QUEEN
     "♜"  # BLACK CHESS ROOK
+    "♝"  # BLACK CHESS BISHOP
+    "♞"  # BLACK CHESS KNIGHT
 
     "≡"  # IDENTICAL TO
     "≢"  # NOT IDENTICAL TO
@@ -149,14 +151,14 @@ ALPHABET = (
 EPOCH = date(1, 1, 1)
 # This fixed date/token pair is a lightweight fingerprint, not a collision-proof version identifier.
 FORMAT_HASH_DATE = date(1010, 1, 1)
-EXPECTED_FORMAT_HASH = "◑y"
+EXPECTED_FORMAT_HASH = "♮⌘"
 
 
 def shuffle_alphabet(alphabet: str) -> str:
     # Stable hashes avoid dependence on Python's randomized hash or RNG versions.
     # The seed and ordering are part of the date format.
     ranked = sorted(
-        (hashlib.sha256(f"short-ts-v1:{character}".encode("utf-8")).digest(), character)
+        (hashlib.sha256(f"dayglyph-v1:{character}".encode("utf-8")).digest(), character)
         for character in alphabet
     )
     return "".join(character for _, character in ranked)

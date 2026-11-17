@@ -14,15 +14,15 @@ Requires Python 3.10+; no dependencies.
 
 ```sh
 ./dayglyph                      # Today in UTC
-./dayglyph 2026-11-11            # ♥▶
-./dayglyph --decode '♥▶'         # Nearest matching date
-./dayglyph --decode '♥▶' --reference-date 2026-11-11  # Use a reference date instead of today
-./dayglyph --precision minute 2026-11-11T09:40:23Z    # dc∈Δ
-./dayglyph --precision second 2026-11-11T09:40:23Z    # Ω∃bx∀
-./dayglyph --precision millisecond 2026-11-11T09:40:23.123Z  # ¬◐w∵⊕¬
-./dayglyph --precision microsecond 2026-11-11T09:40:23.123456Z  # ▽‽r◑♫↘⌂
-./dayglyph --decode '▽‽r◑♫↘⌂' --reference-date 2026-11-11
-./dayglyph hash                  # ◑y (format fingerprint)
+./dayglyph 2026-11-11            # jx
+./dayglyph --decode 'jx'         # Nearest matching date
+./dayglyph --decode 'jx' --reference-date 2026-11-11  # Use a reference date instead of today
+./dayglyph --precision minute 2026-11-11T09:40:23Z    # ¿←♯x
+./dayglyph --precision second 2026-11-11T09:40:23Z    # ←δ@«≠
+./dayglyph --precision millisecond 2026-11-11T09:40:23.123Z  # ♛▼♫λ☂←
+./dayglyph --precision microsecond 2026-11-11T09:40:23.123456Z  # △/ω⬡←★⌐
+./dayglyph --decode '△/ω⬡←★⌐' --reference-date 2026-11-11
+./dayglyph hash                  # ♮⌘ (format fingerprint)
 ./dayglyph --alphabet            # Encoding alphabet and its length
 ./dayglyph --test                # Examples, cycle length, and wraparound
 ```
@@ -36,19 +36,19 @@ install -m 755 dayglyph ~/.local/bin/dayglyph
 
 ## Format
 
-- The alphabet contains 152 characters. Its readable groups and Unicode names are in the source.
-- Encoding order is determined by sorting the SHA-256 digests of `short-ts-v1:` followed by each character,
+- The alphabet contains 154 characters. Its readable groups and Unicode names are in the source.
+- Encoding order is determined by sorting the SHA-256 digests of `dayglyph-v1:` followed by each character,
   encoded as UTF-8. This seed is part of the format.
 - Day zero is `0001-01-01` in the proleptic Gregorian calendar.
-- For dates, reduce the number of days since day zero modulo **23,104** (`152²`).
-- Encode that value in base 152, padded to two characters with the zero glyph (`e`).
+- For dates, reduce the number of days since day zero modulo **23,716** (`154²`).
+- Encode that value in base 154, padded to two characters with the zero glyph (`g`).
 - Decoding chooses the nearest matching date within years 1–9999, preferring the future on an exact tie.
 
-`dayglyph hash` encodes the fixed date `1010-01-01` and prints its token. The expected token is pinned to `◑y`;
+`dayglyph hash` encodes the fixed date `1010-01-01` and prints its token. The expected token is pinned to `♮⌘`;
 if the computed token differs, the command still prints it, reports the mismatch on stderr, and exits with status 1.
 This is a quick format check, not a collision-proof identifier: different encoding rules could produce the same token.
 
-Tokens repeat about every **63.3 years**, so decoding normally resolves dates within about 31.6 years of today.
+Tokens repeat about every **64.9 years**, so decoding normally resolves dates within about 32.5 years of today.
 A token is not a permanent, globally unique date identifier.
 Use `--reference-date YYYY-MM-DD` with `--decode` when you know roughly when the glyph was created; it selects the
 matching date nearest that date instead of today. This does not change the format's fixed day zero.
@@ -61,15 +61,15 @@ The positional input accepts `YYYY-MM-DD`, timestamps with `Z` or a UTC offset, 
 
 | Precision   | Characters | Approximate cycle |
 |:------------|-----------:|------------------:|
-| Date        | 2          | 63.3 years        |
-| Minute      | 4          | 1,014.9 years     |
-| Second      | 5          | 2,571.1 years     |
-| Millisecond | 6          | 390.8 years       |
-| Microsecond | 7          | 59.4 years        |
+| Date        | 2          | 64.9 years        |
+| Minute      | 4          | 1,069.4 years     |
+| Second      | 5          | 2,744.8 years     |
+| Millisecond | 6          | 422.7 years       |
+| Microsecond | 7          | 65.1 years        |
 
 Timestamp input must include a UTC offset or `Z`; offsets are converted to UTC. Without an input, the current UTC
 time is used. Lower precision truncates the timestamp rather than rounding it. Timestamp tokens encode the number
-of units since `0001-01-01T00:00:00Z` modulo `152^characters`, so their cycles are not necessarily whole days.
+of units since `0001-01-01T00:00:00Z` modulo `154^characters`, so their cycles are not necessarily whole days.
 Decoding infers precision from token length and prints two unlabeled lines: UTC with `Z`, then local time with its UTC
 offset. Date-only tokens still print one line. `--reference-date` also accepts an ISO timestamp with an offset; a date
 alone means midnight UTC. The closest matching timestamp is selected within years 1–9999,
