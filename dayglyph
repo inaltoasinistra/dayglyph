@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dayglyph: encode dates as two Unicode characters and decode to the nearest date to today in UTC."""
+"""Dayglyph: encode dates or UTC timestamps as short Unicode tokens."""
 
 import argparse
 import hashlib
@@ -157,6 +157,15 @@ def shuffle_alphabet(alphabet: str) -> str:
 
 SHUFFLED_ALPHABET = shuffle_alphabet(ALPHABET)
 CYCLE_DAYS = len(SHUFFLED_ALPHABET) ** 2
+TIME_PRECISIONS = {
+    "minute": (4, 60_000_000, "minutes"),
+    "second": (5, 1_000_000, "seconds"),
+    "millisecond": (6, 1_000, "milliseconds"),
+    "microsecond": (7, 1, "microseconds"),
+}
+TOKEN_PRECISIONS = {length: name for name, (length, _, _) in TIME_PRECISIONS.items()}
+PRECISION_ALIASES = {"milli": "millisecond", "micro": "microsecond"}
+MICROSECONDS_PER_DAY = 86_400_000_000
 
 
 def encode_integer(value: int) -> str:
@@ -204,6 +213,109 @@ def decode_date(token: str, reference: date | None = None) -> date:
     return nearest_occurrence(parse_token(token), reference)
 
 
+def parse_timestamp(value: str) -> datetime:
+    timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+        raise ValueError("Timestamp must include a UTC offset or Z")
+    return timestamp.astimezone(timezone.utc)
+
+
+def timestamp_offset(value: datetime, unit_microseconds: int) -> int:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("Timestamp must include a UTC offset")
+    value = value.astimezone(timezone.utc)
+    microseconds = (
+        (value.date() - EPOCH).days * MICROSECONDS_PER_DAY
+        + ((value.hour * 60 + value.minute) * 60 + value.second) * 1_000_000
+        + value.microsecond
+    )
+    return microseconds // unit_microseconds
+
+
+def timestamp_microseconds(value: datetime) -> int:
+    return timestamp_offset(value, 1)
+
+
+def parse_integer(token: str) -> int:
+    value = 0
+    for digit in token:
+        value = value * len(SHUFFLED_ALPHABET) + SHUFFLED_ALPHABET.index(digit)
+    return value
+
+
+def encode_timestamp(value: datetime, precision: str) -> str:
+    length, unit_microseconds, _ = TIME_PRECISIONS[precision]
+    offset = timestamp_offset(value, unit_microseconds)
+    # A timestamp's cycle is its entire base-151 capacity, not the date glyph's day-aligned cycle.
+    return encode_integer(offset % len(SHUFFLED_ALPHABET) ** length).rjust(length, SHUFFLED_ALPHABET[0])
+
+
+def decode_timestamp(token: str, reference: datetime | None = None) -> datetime:
+    precision = TOKEN_PRECISIONS.get(len(token))
+    if precision is None:
+        raise ValueError("Expected 4, 5, 6, or 7 timestamp characters")
+    length, unit_microseconds, _ = TIME_PRECISIONS[precision]
+    residue = parse_integer(token)
+    reference = datetime.now(timezone.utc) if reference is None else reference
+    reference_microseconds = timestamp_microseconds(reference)
+    reference_offset = reference_microseconds // unit_microseconds
+    cycle = len(SHUFFLED_ALPHABET) ** length
+    base_cycle = (reference_offset - residue) // cycle
+    maximum = date.max.toordinal() * MICROSECONDS_PER_DAY // unit_microseconds
+    candidates = [
+        residue + cycle * index for index in (base_cycle, base_cycle + 1)
+        if 0 <= residue + cycle * index < maximum
+    ]
+    if not candidates:
+        raise ValueError("No matching timestamp in years 1–9999")
+    nearest = min(
+        candidates,
+        key=lambda offset: (abs(offset * unit_microseconds - reference_microseconds),
+                            offset * unit_microseconds < reference_microseconds),
+    )
+    return datetime.min.replace(tzinfo=timezone.utc) + timedelta(microseconds=nearest * unit_microseconds)
+
+
+def format_timestamp(value: datetime, precision: str) -> str:
+    _, _, timespec = TIME_PRECISIONS[precision]
+    return value.isoformat(timespec=timespec).replace("+00:00", "Z")
+
+
+def format_decoded_timestamp(value: datetime, precision: str) -> str:
+    _, _, timespec = TIME_PRECISIONS[precision]
+    return f"{format_timestamp(value, precision)}\n{value.astimezone().isoformat(timespec=timespec)}"
+
+
+def parse_reference_time(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    if "T" in value:
+        return parse_timestamp(value)
+    return datetime.combine(date.fromisoformat(value), datetime.min.time(), timezone.utc)
+
+
+def decode_token(token: str, reference: str | None) -> str:
+    if len(token) == 2:
+        reference_time = parse_reference_time(reference)
+        return decode_date(token, reference_time.date() if reference_time else None).isoformat()
+    if len(token) not in TOKEN_PRECISIONS:
+        raise ValueError("Expected 2, 4, 5, 6, or 7 token characters")
+    reference_time = parse_reference_time(reference)
+    precision = TOKEN_PRECISIONS[len(token)]
+    return format_decoded_timestamp(decode_timestamp(token, reference_time), precision)
+
+
+def resolve_precision(precision: str) -> str:
+    return PRECISION_ALIASES.get(precision, precision)
+
+
+def encode_value(value: str | None, precision: str) -> str:
+    if precision == "date":
+        return encode_date(date.fromisoformat(value) if value else datetime.now(timezone.utc).date())
+    timestamp = parse_timestamp(value) if value else datetime.now(timezone.utc)
+    return encode_timestamp(timestamp, resolve_precision(precision))
+
+
 def shift_years(value: date, years: int) -> date:
     year = value.year + years
     # Keep calendar anniversaries, clamping leap day in non-leap target years.
@@ -240,6 +352,7 @@ def validate_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace
     if sum([arguments.date is not None, arguments.decode is not None, arguments.test, arguments.alphabet]) > 1:
         parser.error("Use only one of date, --decode, --test, or --alphabet")
     validate_reference_date_mode(parser, arguments)
+    validate_precision_mode(parser, arguments)
 
 
 def validate_reference_date_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
@@ -247,11 +360,18 @@ def validate_reference_date_mode(parser: argparse.ArgumentParser, arguments: arg
         parser.error("--reference-date requires --decode")
 
 
+def validate_precision_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
+    if arguments.precision != "date" and (arguments.decode is not None or arguments.test or arguments.alphabet):
+        parser.error("--precision applies only when encoding")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("date", nargs="?", help="ISO date (default: today in UTC)")
-    parser.add_argument("--decode", metavar="TOKEN", help="show the matching date nearest to today in UTC")
-    parser.add_argument("--reference-date", metavar="YYYY-MM-DD", help="date to use instead of today when decoding")
+    parser.add_argument("date", nargs="?", help="ISO date or timestamp (default: now in UTC)")
+    parser.add_argument("--precision", choices=("date", *TIME_PRECISIONS, *PRECISION_ALIASES), default="date",
+                        help="information to encode (default: date)")
+    parser.add_argument("--decode", metavar="TOKEN", help="show the matching date or timestamp nearest to now in UTC")
+    parser.add_argument("--reference-date", metavar="ISO-DATE[-TIME]", help="reference date or UTC-offset timestamp")
     parser.add_argument("--test", action="store_true", help="show date encodings and special-character token examples")
     parser.add_argument("--alphabet", action="store_true", help="print the encoding alphabet")
     arguments = parser.parse_args()
@@ -263,11 +383,9 @@ def main() -> None:
         elif arguments.test:
             show_examples(datetime.now(timezone.utc).date())
         elif arguments.decode is not None:
-            reference = date.fromisoformat(arguments.reference_date) if arguments.reference_date is not None else None
-            print(decode_date(arguments.decode, reference).isoformat())
+            print(decode_token(arguments.decode, arguments.reference_date))
         else:
-            value = date.fromisoformat(arguments.date) if arguments.date else datetime.now(timezone.utc).date()
-            print(encode_date(value))
+            print(encode_value(arguments.date, arguments.precision))
     except (ValueError, OverflowError) as error:
         parser.error(str(error))
 

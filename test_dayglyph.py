@@ -1,5 +1,6 @@
 import hashlib
 import io
+import os
 import re
 import subprocess
 import sys
@@ -22,7 +23,9 @@ ALPHABET = dayglyph.ALPHABET
 CYCLE_DAYS = dayglyph.CYCLE_DAYS
 SHUFFLED_ALPHABET = dayglyph.SHUFFLED_ALPHABET
 decode_date = dayglyph.decode_date
+decode_timestamp = dayglyph.decode_timestamp
 encode_date = dayglyph.encode_date
+encode_timestamp = dayglyph.encode_timestamp
 main = dayglyph.main
 shift_years = dayglyph.shift_years
 shuffle_alphabet = dayglyph.shuffle_alphabet
@@ -145,11 +148,118 @@ class TestDates(unittest.TestCase):
                 self.assertEqual(shift_years(leap, years), date.fromisoformat(expected))
 
 
+class TestTimestamps(unittest.TestCase):
+    def test_precision(self) -> None:
+        value = datetime(2026, 11, 11, 9, 40, 23, 123456, tzinfo=timezone.utc)
+        for precision, token, expected in [
+            ("minute", "¡γ∩♠", "2026-11-11T09:40Z"),
+            ("second", ":●⬡↙.", "2026-11-11T09:40:23Z"),
+            ("millisecond", "∩⬡p⊗∋α", "2026-11-11T09:40:23.123Z"),
+            ("microsecond", "∂uΞ⬡⌥→∈", "2026-11-11T09:40:23.123456Z"),
+        ]:
+            with self.subTest(precision=precision):
+                self.assertEqual(encode_timestamp(value, precision), token)
+                local = value.astimezone().isoformat(timespec=dayglyph.TIME_PRECISIONS[precision][2])
+                self.assertEqual(dayglyph.decode_token(token, value.isoformat()), f"{expected}\n{local}")
+
+    def test_offset_and_midnight(self) -> None:
+        value = datetime(2026, 11, 12, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(dayglyph.parse_timestamp("2026-11-11T19:00:00-05:00"), value)
+        self.assertEqual(
+            encode_timestamp(datetime.fromisoformat("2026-11-11T19:00:00-05:00"), "second"),
+            encode_timestamp(value, "second"),
+        )
+        self.assertEqual(decode_timestamp(encode_timestamp(value, "second"), value), value)
+
+    def test_nearest(self) -> None:
+        value = datetime.min.replace(tzinfo=timezone.utc)
+        token = encode_timestamp(value, "minute")
+        cycle = timedelta(microseconds=151 ** 4 * 60_000_000)
+        midpoint = value + cycle / 2
+        self.assertEqual(decode_timestamp(token, midpoint - timedelta(microseconds=1)), value)
+        self.assertEqual(decode_timestamp(token, midpoint), value + cycle)
+        self.assertEqual(decode_timestamp(token, midpoint + timedelta(microseconds=1)), value + cycle)
+
+    def test_wraparound(self) -> None:
+        value = datetime(2026, 11, 11, 9, 40, 23, 123456, tzinfo=timezone.utc)
+        for precision, (length, unit, _) in dayglyph.TIME_PRECISIONS.items():
+            with self.subTest(precision=precision):
+                cycle = timedelta(microseconds=151 ** length * unit)
+                token = encode_timestamp(value, precision)
+                self.assertEqual(encode_timestamp(value + cycle, precision), token)
+                self.assertEqual(decode_timestamp(token, value + cycle),
+                                 value + cycle - timedelta(microseconds=dayglyph.timestamp_microseconds(value) % unit))
+
+    def test_limits(self) -> None:
+        for value in [
+            datetime.min.replace(tzinfo=timezone.utc),
+            datetime.max.replace(tzinfo=timezone.utc),
+        ]:
+            for precision, (_, unit, _) in dayglyph.TIME_PRECISIONS.items():
+                with self.subTest(value=value, precision=precision):
+                    expected = value - timedelta(microseconds=dayglyph.timestamp_microseconds(value) % unit)
+                    self.assertEqual(decode_timestamp(encode_timestamp(value, precision), value), expected)
+
+    def test_invalid(self) -> None:
+        with self.assertRaisesRegex(ValueError, "UTC offset"):
+            dayglyph.parse_timestamp("2026-11-11T09:40:23")
+        with self.assertRaisesRegex(ValueError, "UTC offset"):
+            encode_timestamp(datetime(2026, 11, 11, 9, 40), "minute")
+        for token in ["e", "eee", "eeeeeeee", "0000"]:
+            with self.subTest(token=token), self.assertRaises(ValueError):
+                dayglyph.decode_token(token, None)
+
+
 class TestCli(unittest.TestCase):
     def test_executable(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         result = subprocess.run([str(executable), "2026-11-11"], capture_output=True, text=True, check=True)
         self.assertEqual(result.stdout, "∫‡\n")
+
+    def test_timestamp(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        for precision, expected, utc, local in [
+            ("minute", "¡γ∩♠", "2026-11-11T09:40Z", "2026-11-11T04:40-05:00"),
+            ("second", ":●⬡↙.", "2026-11-11T09:40:23Z", "2026-11-11T04:40:23-05:00"),
+            ("millisecond", "∩⬡p⊗∋α", "2026-11-11T09:40:23.123Z", "2026-11-11T04:40:23.123-05:00"),
+            ("microsecond", "∂uΞ⬡⌥→∈", "2026-11-11T09:40:23.123456Z", "2026-11-11T04:40:23.123456-05:00"),
+        ]:
+            with self.subTest(precision=precision):
+                encoded = subprocess.run(
+                    [str(executable), "--precision", precision, "2026-11-11T09:40:23.123456Z"],
+                    capture_output=True, text=True, check=True,
+                )
+                self.assertEqual(encoded.stdout.strip(), expected)
+                result = subprocess.run(
+                    [str(executable), "--decode", expected, "--reference-date", "2026-11-11"],
+                    capture_output=True, text=True, check=True,
+                    env={**os.environ, "TZ": "EST5EDT,M3.2.0,M11.1.0"},
+                )
+                self.assertEqual(result.stdout, f"{utc}\n{local}\n")
+
+    def test_precision_aliases(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        for alias, full_name, expected in [
+            ("milli", "millisecond", "∩⬡p⊗∋α"),
+            ("micro", "microsecond", "∂uΞ⬡⌥→∈"),
+        ]:
+            with self.subTest(alias=alias):
+                value = "2026-11-11T09:40:23.123456Z"
+                result = subprocess.run(
+                    [str(executable), "--precision", alias, value],
+                    capture_output=True, text=True, check=True,
+                )
+                self.assertEqual(result.stdout.strip(), expected)
+                self.assertEqual(dayglyph.encode_value(value, alias), dayglyph.encode_value(value, full_name))
+
+    @patch("sys.argv", ["dayglyph", "--precision", "second"])
+    @patch("sys.stdout", new_callable=io.StringIO)
+    @patch("dayglyph.datetime", wraps=datetime)
+    def test_timestamp_now(self, clock: MagicMock, output: io.StringIO) -> None:
+        clock.now.return_value = datetime(2026, 11, 11, 9, 40, 23, tzinfo=timezone.utc)
+        main()
+        self.assertEqual(output.getvalue(), ":●⬡↙.\n")
+        clock.now.assert_called_once_with(timezone.utc)
 
     @patch("sys.argv", new_callable=list)
     @patch("sys.stdout", new_callable=io.StringIO)
@@ -227,6 +337,12 @@ class TestCli(unittest.TestCase):
             ["2026-11-11", "--reference-date", "2026-11-11"], ["--test", "--reference-date", "2026-11-11"],
             ["--alphabet", "--reference-date", "2026-11-11"],
             ["--decode", "ee", "--reference-date", "not-a-date"],
+            ["--precision", "minute", "2026-11-11"],
+            ["--precision", "second", "2026-11-11T09:40:23"],
+            ["--decode", "eee"],
+            ["--decode", "eeee", "--reference-date", "2026-11-11T09:40"],
+            ["--decode", "eeee", "--precision", "minute"],
+            ["--test", "--precision", "second"],
         ]:
             with self.subTest(arguments=arguments):
                 argv[:] = ["dayglyph", *arguments]
