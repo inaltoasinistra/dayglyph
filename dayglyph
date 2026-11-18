@@ -342,6 +342,12 @@ def shift_years(value: date, years: int) -> date:
     return value.replace(year=year, day=day)
 
 
+def show_alphabet() -> None:
+    print(f"Indexed: {SHUFFLED_ALPHABET}")
+    print(f"Source: {ALPHABET}")
+    print(f"Length: {len(ALPHABET)}")
+
+
 def show_examples(today: date) -> None:
     print(f"Epoch (day 0): {EPOCH.isoformat()}; offset from today: {(EPOCH - today).days:+d} days")
     for label, years in [("Today", 0), ("+1 year", 1), ("-1 year", -1), ("+10 years", 10), ("+100 years", 100)]:
@@ -412,13 +418,12 @@ def main() -> None:
     parser.add_argument("--decode", metavar="TOKEN", help="show the matching date or timestamp nearest to now in UTC")
     parser.add_argument("--reference-date", metavar="ISO-DATE[-TIME]", help="reference date or UTC-offset timestamp")
     parser.add_argument("--test", action="store_true", help="show date encodings and special-character token examples")
-    parser.add_argument("--alphabet", action="store_true", help="print the encoding alphabet")
+    parser.add_argument("--alphabet", action="store_true", help="print the indexed and source alphabet orders")
     arguments = parser.parse_args()
     validate_mode(parser, arguments)
     try:
         if arguments.alphabet:
-            print(SHUFFLED_ALPHABET)
-            print(f"Length: {len(ALPHABET)}")
+            show_alphabet()
         elif arguments.test:
             show_examples(datetime.now(timezone.utc).date())
         elif arguments.decode is not None:

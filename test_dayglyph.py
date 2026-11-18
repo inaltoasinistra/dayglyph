@@ -354,7 +354,7 @@ class TestCli(unittest.TestCase):
     @patch("sys.stdout", new_callable=io.StringIO)
     def test_alphabet(self, output: io.StringIO) -> None:
         main()
-        self.assertEqual(output.getvalue(), f"{SHUFFLED_ALPHABET}\nLength: 154\n")
+        self.assertEqual(output.getvalue(), f"Indexed: {SHUFFLED_ALPHABET}\nSource: {ALPHABET}\nLength: 154\n")
 
     @patch("sys.argv", ["dayglyph", "--test"])
     @patch("sys.stdout", new_callable=io.StringIO)

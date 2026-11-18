@@ -23,7 +23,7 @@ Requires Python 3.10+; no dependencies.
 ./dayglyph --precision microsecond 2026-11-11T09:40:23.123456Z  # △/ω⬡←★⌐
 ./dayglyph --decode '△/ω⬡←★⌐' --reference-date 2026-11-11
 ./dayglyph hash                  # ♮⌘ (format fingerprint)
-./dayglyph --alphabet            # Encoding alphabet and its length
+./dayglyph --alphabet            # Indexed and source alphabet orders, and length
 ./dayglyph --test                # Examples, cycle length, and wraparound
 ```
 
@@ -39,6 +39,7 @@ install -m 755 dayglyph ~/.local/bin/dayglyph
 - The alphabet contains 154 characters. Its readable groups and Unicode names are in the source.
 - Encoding order is determined by sorting the SHA-256 digests of `dayglyph-v1:` followed by each character,
   encoded as UTF-8. This seed is part of the format.
+- `--alphabet` prints the indexed encoding order and the order in which the characters appear in the source.
 - Day zero is `0001-01-01` in the proleptic Gregorian calendar.
 - For dates, reduce the number of days since day zero modulo **23,716** (`154²`).
 - Encode that value in base 154, padded to two characters with the zero glyph (`g`).
