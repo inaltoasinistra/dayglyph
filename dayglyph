@@ -356,21 +356,18 @@ def show_examples(today: date) -> None:
         decoded = decode_date(token, today)
         suffix = f" -> nearest: {decoded.isoformat()}" if decoded != sample else ""
         print(f"{label:10} {sample.isoformat()}  {token}{suffix}")
-    show_cycle_info()
-    show_special_examples(today)
+    show_cycle_info(today)
 
 
-def show_special_examples(reference: date) -> None:
-    print("Special-character tokens:")
-    for token in [".,", ":/", "%·", "¬⌐", "⁜†", "↑∞"]:
-        decoded = decode_date(token, reference)
-        print(f"{token}  {decoded.isoformat()}")
-
-
-def show_cycle_info() -> None:
-    first_date = EPOCH + timedelta(days=CYCLE_DAYS)
+def show_cycle_info(today: date) -> None:
+    # An exact halfway tie decodes toward the future, so the two boundaries differ by a day for even cycles.
+    past = today - timedelta(days=(CYCLE_DAYS + 1) // 2)
+    future = today + timedelta(days=CYCLE_DAYS // 2 + 1)
+    past_token = encode_date(past)
+    future_token = encode_date(future)
     print(f"Cycle: {CYCLE_DAYS} days (~{CYCLE_DAYS / 365.2425:.1f} years)")
-    print(f"First wraparound: {first_date.isoformat()}  {encode_date(first_date)}")
+    print(f"Past wraparound:   {past.isoformat()}  {past_token} -> {decode_date(past_token, today)}")
+    print(f"Future wraparound: {future.isoformat()}  {future_token} -> {decode_date(future_token, today)}")
 
 
 def show_format_hash() -> None:
@@ -417,7 +414,7 @@ def main() -> None:
                         help="information to encode (default: date)")
     parser.add_argument("--decode", metavar="TOKEN", help="show the matching date or timestamp nearest to now in UTC")
     parser.add_argument("--reference-date", metavar="ISO-DATE[-TIME]", help="reference date or UTC-offset timestamp")
-    parser.add_argument("--test", action="store_true", help="show date encodings and special-character token examples")
+    parser.add_argument("--test", action="store_true", help="show examples and nearest past/future cycle wraparounds")
     parser.add_argument("--alphabet", action="store_true", help="print the indexed and source alphabet orders")
     arguments = parser.parse_args()
     validate_mode(parser, arguments)

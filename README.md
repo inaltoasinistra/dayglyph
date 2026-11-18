@@ -24,7 +24,7 @@ Requires Python 3.10+; no dependencies.
 ./dayglyph --decode '△/ω⬡←★⌐' --reference-date 2026-11-11
 ./dayglyph hash                  # ♮⌘ (format fingerprint)
 ./dayglyph --alphabet            # Indexed and source alphabet orders, and length
-./dayglyph --test                # Examples, cycle length, and wraparound
+./dayglyph --test                # Date examples and decoding boundaries around today
 ```
 
 To install the command on your PATH:
@@ -51,6 +51,9 @@ This is a quick format check, not a collision-proof identifier: different encodi
 
 Tokens repeat about every **64.9 years**, so decoding normally resolves dates within about 32.5 years of today.
 A token is not a permanent, globally unique date identifier.
+`--test` shows date examples, the exact cycle length in days, and the closest past and future dates whose tokens
+decode to a different cycle when today is the reference. Each boundary shows its date, token, and decoded date.
+On an exact halfway tie, decoding favors the future; no special-character list is shown.
 Use `--reference-date YYYY-MM-DD` with `--decode` when you know roughly when the glyph was created; it selects the
 matching date nearest that date instead of today. This does not change the format's fixed day zero.
 

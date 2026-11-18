@@ -127,6 +127,16 @@ class TestDates(unittest.TestCase):
             with self.subTest(days=days):
                 self.assertEqual(decode_date("gg", lower + timedelta(days=days)), expected)
 
+    def test_reference_window(self) -> None:
+        for value, expected in [
+            (date(1994, 5, 25), date(2059, 4, 30)),
+            (date(1994, 5, 26), date(1994, 5, 26)),
+            (date(2059, 4, 30), date(2059, 4, 30)),
+            (date(2059, 5, 1), date(1994, 5, 26)),
+        ]:
+            with self.subTest(value=value):
+                self.assertEqual(decode_date(encode_date(value), REFERENCE), expected)
+
     @patch("dayglyph.CYCLE_DAYS", 10)
     def test_tie(self) -> None:
         self.assertEqual(decode_date("gg", date(1, 1, 6)), date(1, 1, 11))
@@ -370,18 +380,16 @@ class TestCli(unittest.TestCase):
         self.assertIn("+10 years  2036-11-11  ⬢♯\n", text)
         self.assertIn("+100 years 2126-11-11  ←β -> nearest: 1996-12-30\n", text)
         self.assertIn("Cycle: 23716 days (~64.9 years)", text)
-        self.assertIn("First wraparound: 0065-12-07  gg\n", text)
-        rows = text.split("Special-character tokens:\n")[1].splitlines()
-        self.assertEqual([row.split()[0] for row in rows], [".,", ":/", "%·", "¬⌐", "⁜†", "↑∞"])
-        for row in rows:
-            token, value = row.split()
-            self.assertEqual(decode_date(token, REFERENCE), date.fromisoformat(value))
+        self.assertIn("Past wraparound:   1994-05-25  /x -> 2059-04-30\n", text)
+        self.assertIn("Future wraparound: 2059-05-01  /∉ -> 1994-05-26\n", text)
+        self.assertNotIn("Special-character tokens:", text)
+        clock.now.assert_called_once_with(timezone.utc)
 
     @patch("sys.stderr", new_callable=io.StringIO)
     @patch("sys.argv", new_callable=list)
     def test_invalid_arguments(self, argv: list[str], output: io.StringIO) -> None:
         for arguments in [
-            ["--test", "2026-01-01"], ["--test", "--decode", "ee"], ["--alphabet", "--test"],
+            ["--test", "2026-01-01"], ["--test", "--decode", "gg"], ["--alphabet", "--test"],
             ["--time-separators"], ["--base", "64"], ["--decode", "ee090909"], ["not-a-date"],
             ["--reference-date", "2026-11-11"],
             ["2026-11-11", "--reference-date", "2026-11-11"], ["--test", "--reference-date", "2026-11-11"],
