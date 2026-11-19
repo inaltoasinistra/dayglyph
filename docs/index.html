@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dayglyph · Date converter</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f5f0;color:#182d26;font:1rem/1.55 "Work Sans",system-ui,sans-serif}main{max-width:68rem;margin:auto;padding:clamp(1rem,5vw,4rem)}header{border-top:5px solid #235742;padding:2rem 0}h1,h2,p{margin:0}h1{font:normal clamp(3.4rem,9vw,6rem)/1.1 Georgia,serif;letter-spacing:-.06em}header p{margin-top:.75rem}.forms{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr));gap:1rem}form,section{background:#fff;border:1px solid #c6d3cb;border-radius:12px;padding:1.5rem}form{display:grid;gap:.8rem;align-content:start}h2{font:normal 2rem Georgia,serif}label{display:block;font-weight:600}input,select{width:100%;font:inherit;border-radius:6px;padding:.65rem .8rem}input,select{background:#fff;color:inherit;border:1px solid #83958b;margin-top:.3rem}output{display:block;background:#eaf3ea;padding:1rem;min-height:3.6rem;border-radius:6px;font-family:monospace;overflow-wrap:anywhere}section{margin-top:1rem}section h2{display:flex;align-items:baseline;gap:1rem}small{font:normal .95rem system-ui;color:#486354}#alphabet{margin-top:1rem;word-break:break-all;font-family:monospace;line-height:1.9;letter-spacing:.18em}
+#alphabet,#version{font-size:1.35rem}
+#refresh{margin-bottom:1rem;cursor:pointer;border:1px solid #83958b;border-radius:6px;padding:.35rem .75rem;background:white;color:inherit;font:inherit}
+#refresh[aria-pressed="true"]{background:#235742;color:white}
+footer{margin-top:1rem}footer a{color:#235742}
+</style>
+<main>
+<header><h1>Dayglyph</h1><p>Encode dates and timestamps as compact Unicode glyphs.</p></header>
+<button type="button" id="refresh" aria-label="Auto-refresh" aria-pressed="true">Auto-refresh on</button>
+<div class="forms">
+<form id="encode"><h2>Encode</h2>
+<label>Date or timestamp<input id="instant" placeholder="2026-11-11T09:40:23.123456Z" spellcheck="false"></label>
+<p>Use Z for UTC or include an offset. A time without an offset uses your local zone. Leave blank for now.</p>
+<label>Precision<select id="precision"></select></label>
+<output id="encoded" aria-label="Encoded glyph"></output></form>
+<form id="decode"><h2>Decode</h2>
+<label>Glyph<input id="token" placeholder="jx" required spellcheck="false" autocapitalize="off"></label>
+<p>Glyphs repeat. Decoding finds the match closest to the reference date, or to now if left blank.</p>
+<label>Reference date (optional, UTC)<input id="reference" type="date" min="0001-01-01" max="9999-12-31"></label>
+<output id="decoded" aria-label="Decoded date or UTC timestamp"></output></form>
+</div><section><h2>Alphabet <small id="count"></small></h2><p>In encoding order</p><div id="alphabet"></div><small>Protocol version <code id="version"></code></small></section>
+<footer><a href="https://github.com/inaltoasinistra/dayglyph">View Dayglyph on GitHub</a></footer>
+</main>
+<script src="./dayglyph.js"></script>
+</html>

@@ -34,6 +34,10 @@ mkdir -p ~/.local/bin
 install -m 755 dayglyph ~/.local/bin/dayglyph
 ```
 
+## Web preview
+
+Run `./docs-scripts/serve.sh` and open <http://localhost:9000/>. Refresh the page after editing files in `docs/`. Press Ctrl+C to stop the server.
+
 ## Format
 
 - The alphabet contains 154 characters. Its readable groups and Unicode names are in the source.
@@ -75,8 +79,7 @@ Timestamp input must include a UTC offset or `Z`; offsets are converted to UTC. 
 time is used. Lower precision truncates the timestamp rather than rounding it. Timestamp tokens encode the number
 of units since `0001-01-01T00:00:00Z` modulo `154^characters`, so their cycles are not necessarily whole days.
 Decoding infers precision from token length and prints two unlabeled lines: UTC with `Z`, then local time with its UTC
-offset. Date-only tokens still print one line. `--reference-date` also accepts an ISO timestamp with an offset; a date
-alone means midnight UTC. The closest matching timestamp is selected within years 1–9999,
+offset. Date-only tokens still print one line. `--reference-date YYYY-MM-DD` uses midnight UTC on that date. The closest matching timestamp is selected within years 1–9999,
 preferring the future on an exact tie. Microsecond precision describes the representation, not the accuracy of the
 machine's clock.
 

@@ -222,13 +222,6 @@ def decode_date(token: str, reference: date | None = None) -> date:
     return nearest_occurrence(parse_token(token), reference)
 
 
-def parse_timestamp(value: str) -> datetime:
-    timestamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        raise ValueError("Timestamp must include a UTC offset or Z")
-    return timestamp.astimezone(timezone.utc)
-
-
 def timestamp_offset(value: datetime, unit_microseconds: int) -> int:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("Timestamp must include a UTC offset")
@@ -298,9 +291,10 @@ def format_decoded_timestamp(value: datetime, precision: str) -> str:
 def parse_reference_time(value: str | None) -> datetime | None:
     if value is None:
         return None
-    if "T" in value:
-        return parse_timestamp(value)
-    return datetime.combine(date.fromisoformat(value), datetime.min.time(), timezone.utc)
+    reference = date.fromisoformat(value)
+    if reference.isoformat() != value:
+        raise ValueError("Expected reference date in YYYY-MM-DD format")
+    return datetime.combine(reference, datetime.min.time(), timezone.utc)
 
 
 def decode_token(token: str, reference: str | None) -> str:
@@ -413,7 +407,7 @@ def main() -> None:
     parser.add_argument("--precision", choices=("date", *TIME_PRECISIONS, *PRECISION_ALIASES), default="date",
                         help="information to encode (default: date)")
     parser.add_argument("--decode", metavar="TOKEN", help="show the matching date or timestamp nearest to now in UTC")
-    parser.add_argument("--reference-date", metavar="ISO-DATE[-TIME]", help="reference date or UTC-offset timestamp")
+    parser.add_argument("--reference-date", metavar="YYYY-MM-DD", help="reference date at midnight UTC")
     parser.add_argument("--test", action="store_true", help="show examples and nearest past/future cycle wraparounds")
     parser.add_argument("--alphabet", action="store_true", help="print the indexed and source alphabet orders")
     arguments = parser.parse_args()

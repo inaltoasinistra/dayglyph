@@ -174,11 +174,11 @@ class TestTimestamps(unittest.TestCase):
             with self.subTest(precision=precision):
                 self.assertEqual(encode_timestamp(value, precision), token)
                 local = value.astimezone().isoformat(timespec=dayglyph.TIME_PRECISIONS[precision][2])
-                self.assertEqual(dayglyph.decode_token(token, value.isoformat()), f"{expected}\n{local}")
+                self.assertEqual(dayglyph.decode_token(token, value.date().isoformat()), f"{expected}\n{local}")
 
     def test_offset_and_midnight(self) -> None:
         value = datetime(2026, 11, 12, 0, 0, tzinfo=timezone.utc)
-        self.assertEqual(dayglyph.parse_timestamp("2026-11-11T19:00:00-05:00"), value)
+        self.assertEqual(dayglyph.parse_encoding_timestamp("2026-11-11T19:00:00-05:00"), value)
         self.assertEqual(
             encode_timestamp(datetime.fromisoformat("2026-11-11T19:00:00-05:00"), "second"),
             encode_timestamp(value, "second"),
@@ -215,8 +215,6 @@ class TestTimestamps(unittest.TestCase):
                     self.assertEqual(decode_timestamp(encode_timestamp(value, precision), value), expected)
 
     def test_invalid(self) -> None:
-        with self.assertRaisesRegex(ValueError, "UTC offset"):
-            dayglyph.parse_timestamp("2026-11-11T09:40:23")
         with self.assertRaisesRegex(ValueError, "UTC offset"):
             encode_timestamp(datetime(2026, 11, 11, 9, 40), "minute")
         for token in ["e", "eee", "eeeeeeee", "0000"]:
@@ -399,6 +397,7 @@ class TestCli(unittest.TestCase):
             ["--precision", "minute", "hash"],
             ["--decode", "eee"],
             ["--decode", "eeee", "--reference-date", "2026-11-11T09:40"],
+            ["--decode", "jx", "--reference-date", "2026-11-11T09:40Z"],
             ["--decode", "eeee", "--precision", "minute"],
             ["--test", "--precision", "second"],
         ]:
