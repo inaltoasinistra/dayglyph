@@ -79,6 +79,47 @@ class TestAlphabet(unittest.TestCase):
         self.assertEqual(result.stdout.splitlines(), tokens)
 
 
+class TestDayglyphId(unittest.TestCase):
+    def test_example_sequence(self) -> None:
+        previous = None
+        for instant, expected in [
+            ("2026-11-24T08:38:36", "j♭"),
+            ("2026-11-24T08:39:37", "¿x●m"),
+            ("2026-11-24T08:40:10", "¿x●β"),
+            ("2026-11-24T08:40:39", "←δΨ≈⌁"),
+            ("2026-11-25T08:40:39", "j↓"),
+        ]:
+            previous = dayglyph.next_id(previous, datetime.fromisoformat(instant).replace(tzinfo=timezone.utc))
+            self.assertEqual(previous, expected)
+
+    def test_stalled_clock(self) -> None:
+        now = datetime(2026, 11, 24, 8, 40, 39, 123456, timezone.utc)
+        previous = "←δΨ≈⌁"
+        for precision in ("millisecond", "microsecond"):
+            previous = dayglyph.next_id(previous, now)
+            self.assertEqual(previous, encode_timestamp(now, precision))
+        for reference in (now, now - timedelta(hours=1)):
+            expected = encode_timestamp(now + timedelta(microseconds=1), "microsecond")
+            self.assertEqual(dayglyph.next_id(previous, reference), expected)
+
+    def test_midnight_rollback(self) -> None:
+        now = datetime(2026, 11, 24, 23, 59, 59, 999999, timezone.utc)
+        self.assertEqual(dayglyph.next_id(encode_timestamp(now, "microsecond"), now), "j↓")
+
+    def test_command(self) -> None:
+        command = [str(Path(__file__).resolve().with_name("dayglyph")), "id"]
+        first = subprocess.check_output(command, text=True).strip()
+        self.assertEqual(len(first), 2)
+        second = subprocess.check_output([*command, first], text=True).strip()
+        self.assertNotEqual(first, second)
+        self.assertIn("dayglyph id [", subprocess.check_output([*command, "--help"], text=True))
+        for invalid in (["abc"], ["ii"], [first, second]):
+            result = subprocess.run([*command, *invalid], capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, "")
+            self.assertIn("error:", result.stderr)
+
+
 class TestDates(unittest.TestCase):
     def test_encode(self) -> None:
         for value, expected in [
@@ -269,6 +310,21 @@ class TestCli(unittest.TestCase):
                 )
                 self.assertEqual(result.stdout, f"{utc}\n{local}\n")
 
+    def test_decode_timezone(self) -> None:
+        executable = Path(__file__).with_name("dayglyph").resolve()
+        for token, zone, expected in [
+            ("♛▼♫λ☂←", "utc", "2026-11-11T09:40:23.123Z"),
+            ("♛▼♫λ☂←", "local", "2026-11-11T04:40:23.123-05:00"),
+            ("jx", "local", "2026-11-11"),
+            ("jx", "utc", "2026-11-11"),
+        ]:
+            with self.subTest(token=token, zone=zone):
+                output = subprocess.check_output(
+                    [executable, "--decode", token, "--timezone", zone, "--reference-date", "2026-11-11"],
+                    text=True, env={**os.environ, "TZ": "EST5"},
+                )
+                self.assertEqual(output, expected + "\n")
+
     def test_precision_aliases(self) -> None:
         executable = Path(__file__).with_name("dayglyph").resolve()
         for alias, full_name, expected in [
@@ -390,6 +446,7 @@ class TestCli(unittest.TestCase):
             ["--test", "2026-01-01"], ["--test", "--decode", "gg"], ["--alphabet", "--test"],
             ["--time-separators"], ["--base", "64"], ["--decode", "ee090909"], ["not-a-date"],
             ["--reference-date", "2026-11-11"],
+            ["--timezone", "utc"], ["--decode", "jx", "--timezone", "both"],
             ["2026-11-11", "--reference-date", "2026-11-11"], ["--test", "--reference-date", "2026-11-11"],
             ["--alphabet", "--reference-date", "2026-11-11"],
             ["--decode", "ee", "--reference-date", "not-a-date"],

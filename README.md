@@ -34,6 +34,21 @@ mkdir -p ~/.local/bin
 install -m 755 dayglyph ~/.local/bin/dayglyph
 ```
 
+## Monotonic IDs
+
+```sh
+id=$(./dayglyph id)        # Start with today's two-glyph UTC date
+id=$(./dayglyph id "$id")  # Pass the last ID on each subsequent call
+```
+
+`dayglyph id` chooses the shortest precision that represents a UTC time strictly later than the last ID:
+date (midnight), minute, second, millisecond, then microsecond. A new minute can use four glyphs again;
+a new day can use two. If the clock stalls or moves backward, the command uses the previous ID's time plus
+one microsecond. IDs are ordered by **decoded time**, not by sorting the glyph strings.
+
+The command stores no state: callers must pass the latest ID in sequence. Tokens repeat, so the previous ID
+is interpreted relative to the current UTC clock using the decoding ranges below.
+
 ## Web preview
 
 Run `./docs-scripts/serve.sh` and open <http://localhost:9000/>. Refresh the page after editing files in `docs/`. Press Ctrl+C to stop the server.
@@ -79,7 +94,9 @@ Timestamp input must include a UTC offset or `Z`; offsets are converted to UTC. 
 time is used. Lower precision truncates the timestamp rather than rounding it. Timestamp tokens encode the number
 of units since `0001-01-01T00:00:00Z` modulo `154^characters`, so their cycles are not necessarily whole days.
 Decoding infers precision from token length and prints two unlabeled lines: UTC with `Z`, then local time with its UTC
-offset. Date-only tokens still print one line. `--reference-date YYYY-MM-DD` uses midnight UTC on that date. The closest matching timestamp is selected within years 1–9999,
+offset. Use `--timezone utc` or `--timezone local` with `--decode` to print only the selected line.
+Date-only tokens always print one date. `--reference-date YYYY-MM-DD` uses midnight UTC on that date.
+The closest matching timestamp is selected within years 1–9999,
 preferring the future on an exact tie. Microsecond precision describes the representation, not the accuracy of the
 machine's clock.
 

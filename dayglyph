@@ -283,9 +283,14 @@ def format_timestamp(value: datetime, precision: str) -> str:
     return value.isoformat(timespec=timespec).replace("+00:00", "Z")
 
 
-def format_decoded_timestamp(value: datetime, precision: str) -> str:
+def format_decoded_timestamp(value: datetime, precision: str, output_zone: str | None) -> str:
+    if output_zone == "utc":
+        return format_timestamp(value, precision)
     _, _, timespec = TIME_PRECISIONS[precision]
-    return f"{format_timestamp(value, precision)}\n{value.astimezone().isoformat(timespec=timespec)}"
+    local = value.astimezone().isoformat(timespec=timespec)
+    if output_zone == "local":
+        return local
+    return f"{format_timestamp(value, precision)}\n{local}"
 
 
 def parse_reference_time(value: str | None) -> datetime | None:
@@ -297,7 +302,7 @@ def parse_reference_time(value: str | None) -> datetime | None:
     return datetime.combine(reference, datetime.min.time(), timezone.utc)
 
 
-def decode_token(token: str, reference: str | None) -> str:
+def decode_token(token: str, reference: str | None, output_zone: str | None = None) -> str:
     if len(token) == 2:
         reference_time = parse_reference_time(reference)
         return decode_date(token, reference_time.date() if reference_time else None).isoformat()
@@ -305,7 +310,7 @@ def decode_token(token: str, reference: str | None) -> str:
         raise ValueError("Expected 2, 4, 5, 6, or 7 token characters")
     reference_time = parse_reference_time(reference)
     precision = TOKEN_PRECISIONS[len(token)]
-    return format_decoded_timestamp(decode_timestamp(token, reference_time), precision)
+    return format_decoded_timestamp(decode_timestamp(token, reference_time), precision, output_zone)
 
 
 def resolve_precision(precision: str) -> str:
@@ -375,14 +380,18 @@ def show_format_hash() -> None:
 def validate_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
     if sum([arguments.date is not None, arguments.decode is not None, arguments.test, arguments.alphabet]) > 1:
         parser.error("Use only one of date, --decode, --test, or --alphabet")
-    validate_reference_date_mode(parser, arguments)
+    validate_decode_options(parser, arguments)
     validate_precision_mode(parser, arguments)
     validate_format_hash_mode(parser, arguments)
 
 
-def validate_reference_date_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
-    if arguments.reference_date is not None and arguments.decode is None:
+def validate_decode_options(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
+    if arguments.decode is not None:
+        return
+    if arguments.reference_date is not None:
         parser.error("--reference-date requires --decode")
+    if arguments.timezone is not None:
+        parser.error("--timezone requires --decode")
 
 
 def validate_precision_mode(parser: argparse.ArgumentParser, arguments: argparse.Namespace) -> None:
@@ -395,18 +404,61 @@ def validate_format_hash_mode(parser: argparse.ArgumentParser, arguments: argpar
         parser.error("--precision does not apply to hash")
 
 
+def next_id(last_id: str | None, now: datetime) -> str:
+    now = now.astimezone(timezone.utc)
+    if last_id is None:
+        return encode_date(now.date())
+    if any(character not in ALPHABET for character in last_id):
+        raise ValueError("Last ID contains a character outside the Dayglyph alphabet")
+    if len(last_id) == 2:
+        previous = datetime.combine(decode_date(last_id, now.date()), datetime.min.time(), timezone.utc)
+    elif len(last_id) in TOKEN_PRECISIONS:
+        previous = decode_timestamp(last_id, now)
+    else:
+        raise ValueError("Expected a last ID of 2, 4, 5, 6, or 7 characters")
+
+    target = now if now > previous else previous + timedelta(microseconds=1)
+    if target.date() > previous.date():
+        token = encode_date(target.date())
+        if decode_date(token, now.date()) == target.date():
+            return token
+    for precision, (_, unit, _) in TIME_PRECISIONS.items():
+        if timestamp_offset(target, unit) > timestamp_offset(previous, unit):
+            token = encode_timestamp(target, precision)
+            # After a large clock rollback, shorter tokens can decode into a different cycle.
+            if timestamp_offset(decode_timestamp(token, now), unit) == timestamp_offset(target, unit):
+                return token
+    raise ValueError("Next ID is outside the unambiguous range of the current clock")
+
+
+def id_main(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="dayglyph id", description="Print the shortest Dayglyph ID later than LAST_ID.")
+    parser.add_argument("last_id", metavar="LAST_ID", nargs="?", help="previous ID (omit to start with today's date)")
+    arguments = parser.parse_args(argv)
+    try:
+        print(next_id(arguments.last_id, datetime.now(timezone.utc)))
+    except (ValueError, OverflowError) as error:
+        parser.error(str(error))
+
+
 def main() -> None:
+    # Dispatch before parsing so a bare ISO date remains valid without an encode subcommand.
+    if sys.argv[1:2] == ["id"]:
+        return id_main(sys.argv[2:])
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("date", nargs="?", help="date:  YYYY-MM-DD\n"
                         "UTC:   YYYY-MM-DDTHH:MM[:SS[.ffffff]]Z\n"
                         "offset: YYYY-MM-DDTHH:MM[:SS[.ffffff]]±HH:MM\n"
                         "local: YYYY-MM-DDTHH:MM[:SS[.ffffff]] (no offset)\n"
                         "hash: format fingerprint (1010-01-01)\n"
+                        "id [LAST_ID]: generate a monotonic ID\n"
                         "no input: current time\n"
                         "timestamps are converted to UTC before encoding")
     parser.add_argument("--precision", choices=("date", *TIME_PRECISIONS, *PRECISION_ALIASES), default="date",
                         help="information to encode (default: date)")
     parser.add_argument("--decode", metavar="TOKEN", help="show the matching date or timestamp nearest to now in UTC")
+    parser.add_argument("--timezone", choices=("utc", "local"),
+                        help="print decoded timestamps in one timezone (default: UTC then local)")
     parser.add_argument("--reference-date", metavar="YYYY-MM-DD", help="reference date at midnight UTC")
     parser.add_argument("--test", action="store_true", help="show examples and nearest past/future cycle wraparounds")
     parser.add_argument("--alphabet", action="store_true", help="print the indexed and source alphabet orders")
@@ -418,7 +470,7 @@ def main() -> None:
         elif arguments.test:
             show_examples(datetime.now(timezone.utc).date())
         elif arguments.decode is not None:
-            print(decode_token(arguments.decode, arguments.reference_date))
+            print(decode_token(arguments.decode, arguments.reference_date, arguments.timezone))
         elif arguments.date == "hash":
             show_format_hash()
         else:
